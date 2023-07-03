@@ -18,8 +18,9 @@
 #include "hardware/spi.h"
 
 // グローバル変数定義
-unsigned char VRAM[VRAM_X*VRAM_Y] __attribute__ ((aligned (4))); //VRAM
-unsigned char TOPVRAM[VRAM_X*TOPLINE] __attribute__ ((aligned (4))); //画面上部の固定VRAM
+unsigned char VRAMALL[VRAM_X*(TOPLINE+VRAM_Y)] __attribute__ ((aligned (4))); //全VRAM領域確保
+unsigned char *TOPVRAM=VRAMALL; //画面上部の固定VRAM
+unsigned char *VRAM=VRAMALL+VRAM_X*TOPLINE; //回転表示用VRAM
 short vscanv1_x,vscanv1_y,vscanv2_x,vscanv2_y;	//映像表示スキャン用ベクトル
 short vscanstartx,vscanstarty; //映像表示スキャン開始座標
 short vscanx,vscany; //映像表示スキャン処理中座標
@@ -30,8 +31,6 @@ unsigned short ClTable[256];
 
 
 int LCD_ALIGNMENT; // VERTICAL, HORIZONTAL, VERTICAL&LCD180TURN, or HORIZONTAL&LCD180TURN
-int X_RES; // 横方向解像度
-int Y_RES; // 縦方向解像度
 
 static inline void lcd_cs_lo() {
     asm volatile("nop \n nop \n nop");
@@ -299,8 +298,6 @@ void LCD_Init()
 	LCD_WriteComm(0x11);
 	sleep_ms(120);
 	LCD_WriteComm(0x29);
-	X_RES=LCD_COLUMN_RES;
-	Y_RES=LCD_ROW_RES;
 }
 
 void LCD_setAddrWindow(unsigned short x,unsigned short y,unsigned short w,unsigned short h)
@@ -324,13 +321,6 @@ void LCD_setAddrWindow(unsigned short x,unsigned short y,unsigned short w,unsign
 	LCD_WriteComm(0x2c);
 }
 
-void LCD_SetCursor(unsigned short x, unsigned short y)
-{
-	LCD_setAddrWindow(x,y,X_RES-x,1);
-	lcd_dc_hi();
-	lcd_cs_lo();
-}
-
 void LCD_continuous_output(unsigned short x,unsigned short y,unsigned short color,int n)
 {
 	//High speed continuous output
@@ -349,11 +339,12 @@ void LCD_Clear(unsigned short color)
 {
 	int i;
     unsigned short d;
-	LCD_setAddrWindow(0,0,X_RES,Y_RES);
+	if(LCD_ALIGNMENT & HORIZONTAL) LCD_setAddrWindow(0,0,LCD_ROW_RES,LCD_COLUMN_RES);
+	else LCD_setAddrWindow(0,0,LCD_COLUMN_RES,LCD_ROW_RES);
 	lcd_dc_hi();
 	lcd_cs_lo();
 	d=(color>>8) | (color<<8);
-	for (i=0; i < X_RES*Y_RES ; i++){
+	for (i=0; i < LCD_COLUMN_RES*LCD_ROW_RES ; i++){
 		spi_write_blocking_notfinish(LCD_SPICH, (unsigned char *)&d, 2);
 	}
 	checkSPIfinish();
@@ -380,51 +371,55 @@ void set_lcdalign(unsigned char align){
 	if(!(align&HORIZONTAL)){
 		if (align&LCD180TURN) LCD_WriteData(0x8C);
 		else LCD_WriteData(0x48);
-		X_RES=LCD_COLUMN_RES;
-		Y_RES=LCD_ROW_RES;
 	}
 	else{
 		if (align&LCD180TURN) LCD_WriteData(0xC8);
 		else LCD_WriteData(0x0C);
-		X_RES=LCD_ROW_RES;
-		Y_RES=LCD_COLUMN_RES;
 	}
 	LCD_Clear(0);
 }
 
-void lineoutput(unsigned short x,unsigned short y,unsigned short vx,unsigned short vy,unsigned char *vp)
-{
-	int i;
-	unsigned short d;
-	for(i=0;i<256;i++){
-		d=ClTable[*(vp+(y&0xff00)+(x>>8))];
-		while (!spi_is_writable(LCD_SPICH))
-            tight_loop_contents();
-        spi_get_hw(LCD_SPICH)->dr = d&0xff;
-		while (!spi_is_writable(LCD_SPICH))
-            tight_loop_contents();
-        spi_get_hw(LCD_SPICH)->dr = d>>8;
-		x+=vx;
-		y+=vy;
-	}
-	checkSPIfinish();
-}
-
 //液晶に画面データを転送
 void putlcdall(void){
-	unsigned short x,y,i;
-	for(i=0;i<TOPLINE;i++){
-		LCD_SetCursor(32,i+8);
-		lineoutput(0,i<<8,0x100,0,TOPVRAM);
-	}
+	int i,j;
+	unsigned short x,y,x1,y1;
+	unsigned char *p;
+	unsigned short d;
+
+	LCD_setAddrWindow(32,8,256,8+216);
+	lcd_dc_hi();
+	lcd_cs_lo();
 	x=vscanstartx;
 	y=vscanstarty;
-	for(i=0;i<216;i++){
-		LCD_SetCursor(32,i+16);
-		lineoutput(x,y,vscanv1_x,vscanv1_y,VRAM);
-		x+=vscanv2_x;
-		y+=vscanv2_y;
+	for(i=0;i<256;i++){
+		p=TOPVRAM+i;
+		for(j=0;j<8;j++){
+			d=ClTable[*p];
+			while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+				;
+			((spi_hw_t *)LCD_SPICH)->dr = d>>8;
+			while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+				;
+			((spi_hw_t *)LCD_SPICH)->dr = d;
+			p+=256;
+		}
+		x1=x;
+		y1=y;
+		for(j=0;j<216;j++){
+			d=ClTable[*(VRAM+(y1&0xff00)+(x1>>8))];
+			while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+				;
+			((spi_hw_t *)LCD_SPICH)->dr = d>>8;
+			while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+				;
+			((spi_hw_t *)LCD_SPICH)->dr = d;
+			x1+=vscanv2_x;
+			y1+=vscanv2_y;
+		}
+		x+=vscanv1_x;
+		y+=vscanv1_y;
 	}
+	checkSPIfinish();
 }
 
 //  VRAMクリア、液晶画面クリア
@@ -443,12 +438,8 @@ void set_palette(unsigned char n,unsigned char b,unsigned char r,unsigned char g
 {
 	// カラーパレット設定
 	// n:パレット番号0-255、r,g,b:0-255
-	// R5G6B5形式で保存、ただし上位と下位を入れ替え
-
-	unsigned short c;
-	c=((r&0xf8)<<8)+((g&0xfc)<<3)+((b&0xf8)>>3);
-	ClTable[n]=c<<8;
-	ClTable[n]+=c>>8;
+	// R5G6B5形式で保存
+	ClTable[n]=((r&0xf8)<<8)+((g&0xfc)<<3)+((b&0xf8)>>3);
 }
 
 // 液晶画面回転ライブラリ初期化

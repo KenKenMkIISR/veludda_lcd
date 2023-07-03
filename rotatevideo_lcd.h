@@ -24,11 +24,9 @@
 #define LCD_SPI_BAUDRATE_R (15*1000*1000)
 
 extern int LCD_ALIGNMENT;
-extern int X_RES; // 横方向解像度
-extern int Y_RES; // 縦方向解像度
 
-extern unsigned char VRAM[]; // ビデオメモリ
-extern unsigned char TOPVRAM[]; // 画面上部の固定表示用ビデオメモリ
+extern unsigned char *VRAM; // ビデオメモリ
+extern unsigned char *TOPVRAM; // 画面上部の固定表示用ビデオメモリ
 
 // (vstartx,vstarty):画面左上になるVRAM上の座標（256倍）
 // (vscanv1_x,vscanv1_y):画面右方向のスキャンベクトル（256倍）
