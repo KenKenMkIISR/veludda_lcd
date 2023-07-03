@@ -10,7 +10,6 @@
 #include "rotatevideo_lcd.h"
 #include "graphlib.h"
 #include "veludda.h"
-#include "LCDdriver.h"
 #include "ff.h"
 #include <string.h>
 

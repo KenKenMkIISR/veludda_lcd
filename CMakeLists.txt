@@ -13,7 +13,6 @@ pico_sdk_init()
 add_executable(veludda_pico
 	bmpdata.c
 	graphlib.c
-	ili9341_spi.c
 	musicdata.c
 	rotatevideo_lcd.c
 	veludda_chars.c
