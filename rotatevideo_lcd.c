@@ -122,82 +122,21 @@ void LCD_WriteData2(unsigned short data)
 	lcd_cs_hi();
 }
 
-void LCD_WriteDataColor(unsigned short data)
-{
-// Write Color Data  (Equal to LCD_WriteData2)
-    unsigned short d;
-	lcd_dc_hi();
-	lcd_cs_lo();
-    d=(data>>8) | (data<<8);
-	spi_write_blocking(LCD_SPICH, (unsigned char *)&d, 2);
-	lcd_cs_hi();
+void set_lcdalign(unsigned char align){
+	// 液晶の縦横設定
+	LCD_ALIGNMENT=align;
+	LCD_WriteComm(0x36);
+	if(!(align&HORIZONTAL)){
+		if (align&LCD180TURN) LCD_WriteData(0x88);
+		else LCD_WriteData(0x4C);
+	}
+	else{
+		if (align&LCD180TURN) LCD_WriteData(0xC8);
+		else LCD_WriteData(0x0C);
+	}
 }
 
-void LCD_WriteDataN(unsigned char *b,int n)
-{
-// Write Data N bytes
-	lcd_dc_hi();
-	lcd_cs_lo();
-	spi_write_blocking(LCD_SPICH, b,n);
-	lcd_cs_hi();
-}
-
-void LCD_WriteData_notfinish(unsigned char data)
-{
-// Write Data, without SPI transfer finished check
-// After final data write, you should call checkSPIfinish()
-	lcd_dc_hi();
-	lcd_cs_lo();
-	spi_write_blocking_notfinish(LCD_SPICH, &data , 1);
-}
-
-void LCD_WriteData2_notfinish(unsigned short data)
-{
-// Write Data 2 bytes, without SPI transfer finished check
-// After final data write, you should call checkSPIfinish()
-    unsigned short d;
-	lcd_dc_hi();
-	lcd_cs_lo();
-	d=(data>>8) | (data<<8);
-	spi_write_blocking_notfinish(LCD_SPICH, (unsigned char *)&d, 2);
-}
-
-void LCD_WriteDataColor_notfinish(unsigned short data)
-{
-// Write Color Data , without SPI transfer finished check
-// After final data write, you should call checkSPIfinish()
-// Equal to LCD_WriteData2_notfinish
-    unsigned short d;
-	lcd_dc_hi();
-	lcd_cs_lo();
-	d=(data>>8) | (data<<8);
-	spi_write_blocking_notfinish(LCD_SPICH, (unsigned char *)&d, 2);
-}
-
-void LCD_WriteDataN_notfinish(unsigned char *b,int n)
-{
-// Write Data N bytes, without SPI transfer finished check
-// After final data write, you should call checkSPIfinish()
-	lcd_dc_hi();
-	lcd_cs_lo();
-	spi_write_blocking_notfinish(LCD_SPICH, b,n);
-}
-
-void LCD_Read(unsigned char com,unsigned char *b,int n){
-	lcd_cs_lo();
-// Write Command
-	lcd_dc_lo();
-	spi_write_blocking(LCD_SPICH, &com , 1);
-// Read Data
-	lcd_dc_hi();
-	spi_set_baudrate(LCD_SPICH, LCD_SPI_BAUDRATE_R);
-	spi_read_blocking(LCD_SPICH, 0, b, 1); // dummy read
-	spi_read_blocking(LCD_SPICH, 0, b, n);
-	spi_set_baudrate(LCD_SPICH, LCD_SPI_BAUDRATE);
-	lcd_cs_hi();
-}
-
-void LCD_Init()
+void LCD_Init(unsigned char align)
 {
 	lcd_cs_hi();
 	lcd_dc_hi();
@@ -244,8 +183,9 @@ void LCD_Init()
 	LCD_WriteData(0x28);
 	LCD_WriteComm(0xC7);
 	LCD_WriteData(0x86);
-	LCD_WriteComm(0x36);
-	LCD_WriteData(0x48); //Vertical
+
+	set_lcdalign(align);
+
 	LCD_WriteComm(0x37);
 	LCD_WriteData(0x00);
 	LCD_WriteData(0x00);
@@ -259,8 +199,6 @@ void LCD_Init()
 	LCD_WriteData(0x82);
 	LCD_WriteData(0x27);
 	LCD_WriteData(0x00);
-//	LCD_WriteComm(0xF2);
-//	LCD_WriteData(0x00);
 	LCD_WriteComm(0x26);
 	LCD_WriteData(0x01);
 	LCD_WriteComm(0xE0);
@@ -321,20 +259,6 @@ void LCD_setAddrWindow(unsigned short x,unsigned short y,unsigned short w,unsign
 	LCD_WriteComm(0x2c);
 }
 
-void LCD_continuous_output(unsigned short x,unsigned short y,unsigned short color,int n)
-{
-	//High speed continuous output
-	int i;
-    unsigned short d;
-	LCD_setAddrWindow(x,y,n,1);
-	lcd_dc_hi();
-	lcd_cs_lo();
-	d=(color>>8) | (color<<8);
-	for (i=0; i < n ; i++){
-		spi_write_blocking_notfinish(LCD_SPICH, (unsigned char *)&d, 2);
-	}
-	checkSPIfinish();
-}
 void LCD_Clear(unsigned short color)
 {
 	int i;
@@ -350,35 +274,6 @@ void LCD_Clear(unsigned short color)
 	checkSPIfinish();
 }
 
-void drawPixel(unsigned short x, unsigned short y, unsigned short color)
-{
-	LCD_SetCursor(x,y);
-	LCD_WriteData2(color);
-}
-
-unsigned short getColor(unsigned short x, unsigned short y)
-{
-	unsigned int d=0;
-	LCD_SetCursor(x,y);
-	LCD_Read(0x2e, (unsigned char *)&d, 3);
-	return ((d&0xf8)<<8)|((d&0xfc00)>>5)|((d&0xf80000)>>19); //RGB565 format
-}
-
-void set_lcdalign(unsigned char align){
-	// 液晶の縦横設定
-	LCD_ALIGNMENT=align;
-	LCD_WriteComm(0x36);
-	if(!(align&HORIZONTAL)){
-		if (align&LCD180TURN) LCD_WriteData(0x8C);
-		else LCD_WriteData(0x48);
-	}
-	else{
-		if (align&LCD180TURN) LCD_WriteData(0xC8);
-		else LCD_WriteData(0x0C);
-	}
-	LCD_Clear(0);
-}
-
 //液晶に画面データを転送
 void putlcdall(void){
 	int i,j;
@@ -386,38 +281,73 @@ void putlcdall(void){
 	unsigned char *p;
 	unsigned short d;
 
-	LCD_setAddrWindow(32,8,256,8+216);
+	LCD_setAddrWindow(DISPLEFTMARGIN,DISPTOPMARGIN,DISPXSIZE,TOPLINE+DISPYSIZE);
 	lcd_dc_hi();
 	lcd_cs_lo();
 	x=vscanstartx;
 	y=vscanstarty;
-	for(i=0;i<256;i++){
-		p=TOPVRAM+i;
-		for(j=0;j<8;j++){
-			d=ClTable[*p];
-			while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
-				;
-			((spi_hw_t *)LCD_SPICH)->dr = d>>8;
-			while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
-				;
-			((spi_hw_t *)LCD_SPICH)->dr = d;
-			p+=256;
+	if(LCD_ALIGNMENT & HORIZONTAL){
+		for(i=0;i<DISPXSIZE;i++){
+			p=TOPVRAM+i;
+			for(j=0;j<TOPLINE;j++){
+				d=ClTable[*p];
+				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+					;
+				((spi_hw_t *)LCD_SPICH)->dr = d>>8;
+				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+					;
+				((spi_hw_t *)LCD_SPICH)->dr = d;
+				p+=VRAM_X;
+			}
+			x1=x;
+			y1=y;
+			for(j=0;j<DISPYSIZE;j++){
+				d=ClTable[*(VRAM+(y1&0xff00)+(x1>>8))];
+				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+					;
+				((spi_hw_t *)LCD_SPICH)->dr = d>>8;
+				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+					;
+				((spi_hw_t *)LCD_SPICH)->dr = d;
+				x1+=vscanv2_x;
+				y1+=vscanv2_y;
+			}
+			x+=vscanv1_x;
+			y+=vscanv1_y;
 		}
-		x1=x;
-		y1=y;
-		for(j=0;j<216;j++){
-			d=ClTable[*(VRAM+(y1&0xff00)+(x1>>8))];
-			while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
-				;
-			((spi_hw_t *)LCD_SPICH)->dr = d>>8;
-			while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
-				;
-			((spi_hw_t *)LCD_SPICH)->dr = d;
-			x1+=vscanv2_x;
-			y1+=vscanv2_y;
+	}
+	else{
+		p=TOPVRAM;
+		for(i=0;i<TOPLINE;i++){
+			for(j=0;j<DISPXSIZE;j++){
+				d=ClTable[*p];
+				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+					;
+				((spi_hw_t *)LCD_SPICH)->dr = d>>8;
+				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+					;
+				((spi_hw_t *)LCD_SPICH)->dr = d;
+				p++;
+			}
+			p+=VRAM_X-DISPXSIZE;
 		}
-		x+=vscanv1_x;
-		y+=vscanv1_y;
+		for(i=0;i<DISPYSIZE;i++){
+			x1=x;
+			y1=y;
+			for(j=0;j<DISPXSIZE;j++){
+				d=ClTable[*(VRAM+(y1&0xff00)+(x1>>8))];
+				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+					;
+				((spi_hw_t *)LCD_SPICH)->dr = d>>8;
+				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
+					;
+				((spi_hw_t *)LCD_SPICH)->dr = d;
+				x1+=vscanv1_x;
+				y1+=vscanv1_y;
+			}
+			x+=vscanv2_x;
+			y+=vscanv2_y;
+		}
 	}
 	checkSPIfinish();
 }
@@ -446,8 +376,8 @@ void set_palette(unsigned char n,unsigned char b,unsigned char r,unsigned char g
 void init_rotateLCD(unsigned char align)
 {
 	unsigned int i;
-	LCD_Init();
-	set_lcdalign(align);
+	LCD_Init(align);
+	clearscreen();
 
 	//カラーパレット初期化
 	for(i=0;i<8;i++){
@@ -466,6 +396,4 @@ void init_rotateLCD(unsigned char align)
 	vscanv2_y=256;
 	vscanstartx=0;
 	vscanstarty=0;
-
-	clearscreen();
 }
