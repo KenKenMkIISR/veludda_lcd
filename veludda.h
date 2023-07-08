@@ -1,4 +1,4 @@
-// veludda.h by K.Tanaka
+// veludda.h for Raspberry Pi Pico by K.Tanaka
 
 // 入力ボタンのビット定義
 #define GPIO_KEYUP 8

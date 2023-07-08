@@ -1,4 +1,5 @@
 //VELUDDA用　サウンド関連データ by K.Tanaka
+//PIC32MX370F512Hを約95.5MHzで動作させ、Timer3を16分周しPWMのソースとした場合を想定
 
 //sounddata配列　低いドから3オクターブ分の周期カウンタ値、PR3に書き込むと音程設定される
 const unsigned short sounddata[]={

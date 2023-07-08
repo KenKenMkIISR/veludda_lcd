@@ -1,5 +1,5 @@
 // ベクトル式VRAM　LCD出力プログラム　Raspberry Pi Pico用　by K.Tanaka
-// LCD ILI9341
+// 対応LCD： ILI9341
 // 画面上部に固定表示領域あり
 //
 // VRAM解像度256×256ドット＋最上部固定8行
@@ -10,7 +10,6 @@
 // (vstartx,vstarty):画面左上になるVRAM上の座標（256倍）
 // (vscanv1_x,vscanv1_y):画面右方向のスキャンベクトル（256倍）
 // (vscanv2_x,vscanv2_y):画面下方向のスキャンベクトル（256倍）
-
 
 #include <stdio.h>
 #include "pico/stdlib.h"
@@ -275,6 +274,7 @@ void LCD_Clear(unsigned short color)
 }
 
 //液晶に画面データを転送
+//画面上部固定領域およびベクトル式VRAM領域をパラメータに従い出力する
 void putlcdall(void){
 	int i,j;
 	unsigned short x,y,x1,y1;
@@ -294,6 +294,8 @@ void putlcdall(void){
 	lcd_cs_lo();
 	x=vscanstartx;
 	y=vscanstarty;
+
+	//液晶横置きの場合
 	if(LCD_ALIGNMENT & HORIZONTAL){
 		for(i=0;i<DISPXSIZE;i++){
 			p=TOPVRAM+i;
@@ -318,6 +320,7 @@ void putlcdall(void){
 			y+=vscanv1_y;
 		}
 	}
+	//液晶縦置きの場合
 	else{
 		p=TOPVRAM;
 		for(i=0;i<TOPLINE;i++){
@@ -368,11 +371,11 @@ void clearscreen(void)
 	LCD_Clear(0);
 }
 
+// カラーパレット設定
+// n:パレット番号0-255、r,g,b:0-255
+// R5G6B5形式で保存
 void set_palette(unsigned char n,unsigned char b,unsigned char r,unsigned char g)
 {
-	// カラーパレット設定
-	// n:パレット番号0-255、r,g,b:0-255
-	// R5G6B5形式で保存
 	ClTable[n]=((r&0xf8)<<8)+((g&0xfc)<<3)+((b&0xf8)>>3);
 }
 

@@ -1,4 +1,5 @@
 // 画面回転スクロールゲーム　メインプログラム　VELUDDA for Raspberry Pi Pico by K.Tanaka
+// Revision 1.0
 //
 // 拡大縮小回転機能付き液晶出力システム使用
 // 解像度 横256×縦216ドット＋上8行
@@ -51,9 +52,10 @@ const unsigned char atandata[257]={
 	29,29,29,30,30,30,30,30,30,30,30,30,30,30,31,31,31,31,31,31,31,31,31,31,31,31,32,32,32,32,32,32,
 	32
 };
+
+//敵の隊列を設定
+//繰り返し数,敵番号,カウンタ,画像,X,Y,VX,VY,DX,DY
 const short enemyposition[][10]={
-	//敵の隊列を設定
-	//繰り返し数,敵番号,カウンタ,画像,X,Y,VX,VY,DX,DY
 
 	//ステージ1用
 	{5,0,0,2, 452,200,   0, 256, 15, 15},//0
@@ -97,9 +99,10 @@ const short enemyposition[][10]={
 	{6,5,-1,0, 50,290,   0,   0,180, 30},//28
 	{6,5,-1,0, 50,410,   0,   0,180, 30} //29
 };
-const short gndenemyposition[][5]={
+
 //地上敵の位置
 //繰り返し数,X,Y,DX,DY
+const short gndenemyposition[][5]={
 	{5, 20,140, 80,  0},//0
 	{2,320, 40,  0,150},//1
 	{4,620, 10, 45,  0},//2
@@ -111,9 +114,10 @@ const short gndenemyposition[][5]={
 	{4,660,300,  0, 55},//8
 	{4,990,300,  0, 55} //9
 };
+
+//各ステージのenemyposition,gndenemyposition配列番号を列挙
+//最初に空中敵、255から後ろは地上敵、最後に255で1ステージ分終了
 const unsigned char enemytable[][20]={
-	//各ステージのenemyposition,gndenemyposition配列番号を列挙
-	//最初に空中敵、255から後ろは地上敵、最後に255で1ステージ分終了
 	{0,1,2,3,4,5,6,7,255,255},
 	{8,9,10,11,12,13,255,0,5,9,255},
 	{14,15,16,17,255,0,1,3,4,5,8,255},
@@ -126,10 +130,13 @@ const unsigned char enemytable[][20]={
 };
 
 #define GNDENEMYSCORE 500 //地上敵の得点
+
+//空中敵の得点テーブル
 const unsigned short scoretable[]={
-	//空中敵の得点テーブル
 	10,20,50,80,40,30
 };
+
+//敵キャラクター名前
 unsigned char *enemyname[]={
 	"STRA",
 	"KURURU",
@@ -192,6 +199,7 @@ struct {
 _Enemy enemybuf[MAX_ENEMY],gndenemybuf[MAX_GNDENEMY];//空中敵、地上敵格納配列
 _Missile missilebuf[MAX_MISSILE],cannonbuf[MAX_CANNON];//ミサイル、砲弾格納配列
 
+//音声出力用PWM設定値
 #define PWM_WRAP1 1341 // 250MHz/2.983MHz*16
 #define PWM_WRAP2 5364 // 250MHz/2.983MHz*16*4
 #define PWM_WRAP3 21455 // 250MHz/2.983MHz*16*16
@@ -202,14 +210,18 @@ uint16_t pwm_freq=0;
 //----------------------
 // ここからプログラム開始
 //----------------------
+
+// 音声出力
 void sound_on(uint16_t f){
 	if(f==pwm_freq) return;
 	pwm_freq=f;
+
 	if(f==0){
 		// sound off
 		pwm_set_enabled(pwm_slice_num, false);
 		return;
 	}
+	//周波数によりPWM_WRAPの設定を変更
 	if(f<0x1000){
 		if(pwm_wrap!=PWM_WRAP1){
 			pwm_wrap=PWM_WRAP1;
@@ -240,18 +252,19 @@ void sound_off(void){
 	sound_on(0);
 }
 
+// 前回呼び出し時から60分のn秒経過していなければ、それまでウェイト
 void wait60thsec(unsigned short n){
-	// 60分のn秒ウェイト
 	static uint64_t prev_time=0;
 	prev_time+=16667*n;
 	uint64_t t=to_us_since_boot(get_absolute_time());
 	if(t<prev_time) sleep_us(prev_time-t);
 	else prev_time=t;
 }
+
+// 60分のn秒ウェイト
+// スタートボタンが押されればすぐ戻る
+//　戻り値　スタートボタン押されれば1、押されなければ0
 unsigned char startkeycheck(unsigned short n){
-	// 60分のn秒ウェイト
-	// スタートボタンが押されればすぐ戻る
-	//　戻り値　スタートボタン押されれば1、押されなければ0
 	while(n--){
 		wait60thsec(1);
 		if(!gpio_get(GPIO_KEYSTART)){
@@ -260,8 +273,9 @@ unsigned char startkeycheck(unsigned short n){
 	}
 	return 0;
 }
+
+//演奏中の曲を1つ進める
 void playmusic1step(void){
-	//演奏中の曲を1つ進める
 	if(music.stop) return; //演奏終了済み
 	music.count--;
 	if(music.count>0){
@@ -290,22 +304,25 @@ void playmusic1step(void){
 	music.count=*music.p; //音符長さ
 	music.p++;
 }
-void startmusic(const unsigned char *m){
+
 // BGMスタート
+void startmusic(const unsigned char *m){
 	music.p=m;
 	music.startp=m;
 	music.count=1;
 	music.stop=0;
 }
-void stopmusic(void){
+
 // BGM停止
+void stopmusic(void){
 	music.stop=1;
 	music.pr=0;
 	sound_off();
 }
-void sound(void){
+
 //効果音とBGMを出力（効果音優先）
 //60分の1秒ごとに呼び出し
+void sound(void){
 	unsigned short pr;//タイマーカウンター値
 
 	playmusic1step();//BGMの演奏を1つ進める
@@ -343,17 +360,18 @@ void sound(void){
 	if(pr!=2) sound_on(pr);//音程変更。ただしprが2の場合BGM優先
 }
 
-void keycheck(void){
 //ボタン状態読み取り
 //keystatus :現在押されているボタンに対応するビットを1にする
 //keystatus2:前回押されていなくて、今回押されたボタンに対応するビットを1にする
+void keycheck(void){
 	unsigned int k;
 	oldkey=keystatus;
 	keystatus=~gpio_get_all() & KEYSMASK;
 	keystatus2=keystatus & ~oldkey; //ボタンから手を離したかチェック
 }
-void pausecheck(void){
+
 //停止ボタンチェック
+void pausecheck(void){
 	if(keystatus2&KEYSTART){
 		sound_off();//サウンド停止
 		do{
@@ -362,9 +380,10 @@ void pausecheck(void){
 		}while((keystatus2&KEYSTART)==0);
 	}
 }
-unsigned char atan3(int x,int y){
+
 //逆正接関数
 //戻り値 角度0-255（マップ右方向が0、時計回り）
+unsigned char atan3(int x,int y){
 	unsigned char a;
 	if(x==0 && y==0) return 0;
 	if(y>=0){
@@ -391,18 +410,21 @@ unsigned char atan3(int x,int y){
 		}
 	}
 }
-void srand8(unsigned char s){
+
 //8bit乱数の種設定
+void srand8(unsigned char s){
 	random8=s;
 }
-unsigned char rand8(void){
+
 //8bit乱数生成
+unsigned char rand8(void){
 	random8=random8*5+1;
 	return random8;
 }
-void getbmpbuf(unsigned char x,unsigned char y,unsigned char m,unsigned char n){
+
 // VRAM上の座標x,yから横m*縦nドット分をbmpbuf[]に取り込む
 // 画面上下、左右は環状につながっている
+void getbmpbuf(unsigned char x,unsigned char y,unsigned char m,unsigned char n){
 
 	unsigned char i,j,x1;
 	if(bmpbufp+m*n+4>=bmpbuf+sizeof(bmpbuf)) return;
@@ -419,30 +441,31 @@ void getbmpbuf(unsigned char x,unsigned char y,unsigned char m,unsigned char n){
 	*bmpbufp++=m;
 	*bmpbufp++=n;
 }
-void getandputbmpmn(unsigned char x,unsigned char y,unsigned char m,unsigned char n,const unsigned char bmp[]){
+
 // 横m*縦nの画像配列bmp[]を座標(x,y)に表示
 // 書き込み前に元の画像をbmpbufに取り込む
+void getandputbmpmn(unsigned char x,unsigned char y,unsigned char m,unsigned char n,const unsigned char bmp[]){
 	getbmpbuf(x,y,m,n);
 	putbmpmn3(x,y,m,n,bmp);
 }
 
-int rotatex(int x,int y){
 //自機の角度分座標を回転したときのx座標
+int rotatex(int x,int y){
 	return x*Cos(ship.angle)-y*Sin(ship.angle);
 }
-int rotatey(int x,int y){
+
 //自機の角度分座標を回転したときのy座標
+int rotatey(int x,int y){
 	return x*Sin(ship.angle)+y*Cos(ship.angle);
 }
 
-void drawvline(unsigned char x1,unsigned char y1,unsigned char y2,int mx,int my,unsigned char d){
 // 垂直方向にMAPにしたがって背景を描画する
 // x:VRAMの描画X座標
 // y1,y2:VRAM上の描画Y座標（上端、下端）
 // mx,my:MAP上の座標
 // d:描画する列数
 // 背景データを4倍に引き伸ばす
-
+void drawvline(unsigned char x1,unsigned char y1,unsigned char y2,int mx,int my,unsigned char d){
 	unsigned char *p;
 	unsigned char x,y,y3;
 	x=0;
@@ -464,14 +487,13 @@ void drawvline(unsigned char x1,unsigned char y1,unsigned char y2,int mx,int my,
 	}
 }
 
-void drawhline(unsigned char y1,unsigned char x1,unsigned char x2,int mx,int my,unsigned char d){
 // 水平方向にMAPにしたがって背景を描画する
 // y:VRAMの描画Y座標
 // x1,x2:VRAM上の描画X座標（左端、右端）
 // mx,my:MAP上の座標
 // d:描画する行数
 // 背景データを4倍に引き伸ばす
-
+void drawhline(unsigned char y1,unsigned char x1,unsigned char x2,int mx,int my,unsigned char d){
 	unsigned char *p;
 	unsigned char x,y,x3;
 	y=0;
@@ -492,8 +514,9 @@ void drawhline(unsigned char y1,unsigned char x1,unsigned char x2,int mx,int my,
 		d--;
 	}
 }
-void init_background(void){
+
 //背景画像のVRAMへの初期描画、vscan関連変数設定
+void init_background(void){
 	int dx,dy;
 
 	//win_sx,win_sy,win_ex,win_ey 画面描画されている窓のマップ上の絶対座標の最小、最大
@@ -560,16 +583,17 @@ void init_background(void){
 	r1y=NORMALIZEY(ship.y+rotatey(-ADX1,-ADY1));
 }
 
-void addscore(unsigned char n){
 //スコア更新
 //n:倒した敵の番号、255の場合は地上敵
+void addscore(unsigned char n){
 	if(n!=255) score+=scoretable[n];
 	else score+=GNDENEMYSCORE;
 	if(score>=1000000) score=999999;
 	if(score>highscore) highscore=score;
 }
-void addgndenemy(_Enemy *ep,int x,int y){
+
 //地上敵発生
+void addgndenemy(_Enemy *ep,int x,int y){
 	if(ep>=gndenemybuf+MAX_GNDENEMY) return;
 	ep->on=1; //有効
 	ep->no=0; //敵番号
@@ -580,8 +604,9 @@ void addgndenemy(_Enemy *ep,int x,int y){
 	ep->vy=0; //Y方向移動速度*256
 	ep->bmp=Bmp_gndenemy[0]; //画像へのポインタ
 }
-void addenemy(_Enemy *ep,unsigned char no,unsigned char count,int x,int y,short vx,short vy,const unsigned char *bmp){
+
 //空中敵発生
+void addenemy(_Enemy *ep,unsigned char no,unsigned char count,int x,int y,short vx,short vy,const unsigned char *bmp){
 	if(ep>=enemybuf+MAX_ENEMY) return;
 	ep->no=no; //敵番号
 	ep->count=count; //カウンター
@@ -593,8 +618,9 @@ void addenemy(_Enemy *ep,unsigned char no,unsigned char count,int x,int y,short 
 	ep->on=1; //有効
 	enemyleft++; //敵残数
 }
-void addmissile(int x,int y,short vx,short vy,unsigned char c,const unsigned char *bmp){
+
 //ミサイル発射
+void addmissile(int x,int y,short vx,short vy,unsigned char c,const unsigned char *bmp){
 	_Missile *p;
 	for(p=missilebuf;p<missilebuf+MAX_MISSILE;p++){
 		//バッファ内の空きを検索
@@ -610,8 +636,9 @@ void addmissile(int x,int y,short vx,short vy,unsigned char c,const unsigned cha
 		return;
 	}
 }
-void addcannon(int x,int y,int vx,int vy){
+
 //砲弾発射
+void addcannon(int x,int y,int vx,int vy){
 	_Missile *p;
 	for(p=cannonbuf;p<cannonbuf+MAX_CANNON;p++){
 		//バッファ内の空きを検索
@@ -629,8 +656,8 @@ void addcannon(int x,int y,int vx,int vy){
 	}
 }
 
-void gameinit4(){
 //自機、背景、スコア行の初期化
+void gameinit4(){
 	unsigned char x,n;
 	ship.angle=0; //自機の向き
 	ship.x=MAPDX/2*256; //自機の絶対座標*256
@@ -658,9 +685,10 @@ void gameinit4(){
 	sound2count=0;//砲弾飛来音なし
 	sound_off();//サウンド停止
 }
-void gameinit3(){
+
 //ミサイル、砲弾初期化
 //enemytable配列にしたがって、地上敵、空中敵の配置を初期化
+void gameinit3(){
 	_Enemy *p;
 	_Missile *mp;
 	unsigned char a,n;
@@ -720,8 +748,9 @@ void gameinit3(){
 		for(;p<gndenemybuf+MAX_GNDENEMY;p++) p->on=0;//バッファの終わりまでクリア
 	}
 }
-void gameinit2(){
+
 //ゲーム開始時の初期化
+void gameinit2(){
 	if(keystatus==(KEYFIRE|KEYLEFT|KEYSTART) && stage>1 && continuecount<CONTINUEMAX){
 		continuecount++;
 	}
@@ -734,8 +763,8 @@ void gameinit2(){
 	if(music_on) startmusic(musicdata1);//ゲーム開始時の音楽
 }
 
-void gameinit(){
 //ゲーム全体初期化
+void gameinit(){
 	//カラーパレット設定
 	int i;
 	const unsigned char *p;
@@ -751,8 +780,9 @@ void gameinit(){
 	stopmusic();//BGM停止中
 	continuecount=0;
 }
-void title(){
+
 //タイトル画面描画
+void title(){
 	const unsigned char *p;
 	unsigned char x,y,c,n;
 	int i;
@@ -841,9 +871,10 @@ void title(){
 		}
 	}
 }
-void scroll_drawground(){
+
 //画面スクロール＆背景描画
 //スクロール前後での差分のみ描画する
+void scroll_drawground(){
 	int oldsx,oldsy,oldex,oldey;
 	int oldr1x,oldr1y;
 	signed char d;
@@ -924,8 +955,9 @@ void scroll_drawground(){
 		drawhline(scr_ey-d+1,scr_sx,scr_ex,win_sx,win_ey-d+1,d);
 	}
 }
-void drawship(){
+
 //自機表示
+void drawship(){
 	if(ship.on==1){
 		//通常
 		getandputbmpmn(((ship.x>>8)-win_sx+scr_sx-XSIZE_SHIP/2)&0xff,((ship.y>>8)-win_sy+scr_sy-YSIZE_SHIP/2)&0xff,
@@ -939,8 +971,9 @@ void drawship(){
 		if(ship.count==32) ship.on=0;//爆発終了
 	}
 }
-void drawgndenemy(){
+
 //地上敵表示
+void drawgndenemy(){
 	_Enemy *p;
 	const unsigned char *bmp;
 	unsigned short x,y;
@@ -978,8 +1011,9 @@ void drawgndenemy(){
 			XSIZE_GNDENEMY,YSIZE_GNDENEMY,bmp);
 	}
 }
-void drawenemy(){
+
 //空中敵描画
+void drawenemy(){
 	_Enemy *p;
 	unsigned short x,y;
 	for(p=enemybuf;p<enemybuf+MAX_ENEMY;p++){
@@ -1016,8 +1050,9 @@ void drawenemy(){
 		}
 	}
 }
-void drawmissile(){
+
 //ミサイル描画
+void drawmissile(){
 	_Missile *p;
 	unsigned short x,y;
 	for(p=missilebuf;p<missilebuf+MAX_MISSILE;p++){
@@ -1044,8 +1079,9 @@ void drawmissile(){
 			XSIZE_MISSILE,YSIZE_MISSILE,p->bmp);
 	}
 }
-void drawcannon(){
+
 //砲弾描画
+void drawcannon(){
 	_Missile *p;
 	unsigned short x,y;
 	for(p=cannonbuf;p<cannonbuf+MAX_CANNON;p++){
@@ -1072,14 +1108,16 @@ void drawcannon(){
 			XSIZE_CANNON,YSIZE_CANNON,p->bmp);
 	}
 }
-void drawscore(){
+
 //敵残数、スコアの表示
+void drawscore(){
 	putfont_fixarea(10*8,0,0,' ');
 	printnum_fixarea(9*8,0,7,enemyleft);
 	printnum_fixarea(18*8,0,7,score);
 }
-void erasechars(){
+
 //bmpbufに格納された画面内容を逆順に再描画して背景画像に戻す
+void erasechars(){
 	unsigned char m,n;
 	while(bmpbufp>bmpbuf){
 		m=*(bmpbufp-2);
@@ -1088,8 +1126,9 @@ void erasechars(){
 		bmpbufp-=4+m*n;
 	}
 }
-void moveship(){
+
 //自機の移動
+void moveship(){
 	if(ship.on!=1) return;
 	if(keystatus & KEYLEFT) ship.angle--;
 	if(keystatus & KEYRIGHT) ship.angle++;
@@ -1103,8 +1142,9 @@ void moveship(){
 		ship.y=NORMALIZEY(ship.y-Cos(ship.angle));
 	}
 }
+
+//地上敵の砲弾発射処理
 void movegndenemy(){
-	//地上敵の砲弾発射処理
 	_Enemy *p;
 	int dx,dy,dx1,dy1;
 	if(ship.on!=1) return;
@@ -1130,9 +1170,10 @@ void movegndenemy(){
 		addcannon(p->x,p->y,dx/128+Sin(ship.angle),dy/128-Cos(ship.angle)); //砲弾発射
 	}
 }
-unsigned char enemynearcheck(_Enemy *p){
+
 //敵が自機の近傍にいるかチェック
 //戻り値　近傍の場合：1、それ以外：0
+unsigned char enemynearcheck(_Enemy *p){
 #define ENEMYNEAR 80 //近傍距離
 
 	int dx,dy;
@@ -1151,8 +1192,9 @@ unsigned char enemynearcheck(_Enemy *p){
 	if((dx*dx+dy*dy)>ENEMYNEAR*ENEMYNEAR) return 0;
 	return 1;
 }
-void enemyavoid(_Enemy *p){
+
 //自機を避けるように敵の進行方向変更
+void enemyavoid(_Enemy *p){
 	int dx,dy;
 	unsigned char a1,a2,a3;
 
@@ -1179,8 +1221,9 @@ void enemyavoid(_Enemy *p){
 		p->vy=Sin(a2);
 	}
 }
-void enemyturnright(_Enemy *p){
+
 // 空中敵を時計回りに90度回転
+void enemyturnright(_Enemy *p){
 	short t1;
 	t1=p->vx;
 	p->vx=-(p->vy);
@@ -1188,8 +1231,9 @@ void enemyturnright(_Enemy *p){
 	p->bmp+=SQSIZE_ENEMY;
 	if(p->bmp==Bmp_enemy[p->no*4+4]) p->bmp=Bmp_enemy[p->no*4];
 }
-void enemyturnleft(_Enemy *p){
+
 // 空中敵を反時計回りに90度回転
+void enemyturnleft(_Enemy *p){
 	short t1;
 	t1=p->vx;
 	p->vx=p->vy;
@@ -1197,8 +1241,9 @@ void enemyturnleft(_Enemy *p){
 	p->bmp-=SQSIZE_ENEMY;
 	if(p->bmp<Bmp_enemy[p->no*4]) p->bmp=Bmp_enemy[p->no*4+3];
 }
+
+//空中敵の移動
 void moveenemy(){
-	//空中敵の移動
 	_Enemy *p;
 	for(p=enemybuf;p<enemybuf+MAX_ENEMY;p++){
 		//p->on 0:無効、1:通常、2:爆発中
@@ -1255,8 +1300,9 @@ void moveenemy(){
 		}
 	}
 }
-void movemissile(){
+
 //ミサイル移動
+void movemissile(){
 	_Missile *p;
 	for(p=missilebuf;p<missilebuf+MAX_MISSILE;p++){
 		if(!p->on) continue;
@@ -1269,8 +1315,9 @@ void movemissile(){
 		p->y=NORMALIZEY(p->y + p->vy);
 	}
 }
-void movecannon(){
+
 //砲弾移動
+void movecannon(){
 	_Missile *p;
 	int c;
 	for(p=cannonbuf;p<cannonbuf+MAX_CANNON;p++){
@@ -1287,38 +1334,43 @@ void movecannon(){
 		p->bmp=Bmp_cannon[c];
 	}
 }
-void fire(){
+
 //FIREボタンで自機のミサイル発射
+void fire(){
 	if(ship.on!=1) return;
 	if(keystatus2 & KEYFIRE){
 		addmissile(NORMALIZEX(ship.x+Sin(ship.angle)*12),NORMALIZEY(ship.y-Cos(ship.angle)*12),
 			Sin(ship.angle)*5,-Cos(ship.angle)*5,32,Bmp_missile1);
 	}
 }
-void enemydeath(_Enemy *ep){
+
 //空中敵死亡処理
+void enemydeath(_Enemy *ep){
 	ep->on=2;//敵爆発
 	ep->count=0; //敵爆発画像用カウンタ
 	enemyleft--; //敵残数減
 	addscore(ep->no);
 	sounddatap=sounddata2;//敵爆発音設定
 }
-void gndenemydeath(_Enemy *ep){
+
 //地上敵死亡処理
+void gndenemydeath(_Enemy *ep){
 	ep->on=2;//敵爆発
 	ep->count=0; //敵爆発画像用カウンタ
 	addscore(255);
 	sounddatap=sounddata2;//敵爆発音設定
 }
-void shipdeath(){
+
 //自機死亡処理
+void shipdeath(){
 	ship.on=2;//爆発中
 	ship.count=0; //自機爆発画像用カウンタ
 	sounddatap=sounddata3;//自機爆発音設定
 	sound2count=0;//砲弾飛来音停止
 }
-void collisioncheck(){
+
 //各種衝突チェック
+void collisioncheck(){
 	_Enemy *ep;
 	_Missile *mp;
 	int dx,dy;
@@ -1436,13 +1488,15 @@ void collisioncheck(){
 		shipdeath();//自機死亡処理
 	}
 }
-void gameover(){
+
 //ゲーム終了時処理
+void gameover(){
 	sound_off();//サウンド停止
 }
+
+//ゲームのステータス更新
 void changegamestatus(){
 	unsigned char x,y,e;
-	//ゲームのステータス更新
 	switch(gamestatus){
 		case 0://ゲームスタート
 		case 1://ステージ数表示中
@@ -1520,6 +1574,8 @@ void changegamestatus(){
 			break;
 	}
 }
+
+//メインループ
 void game(){
 	gamestatus=0;//0:ゲーム開始、1:ステージ数表示中、2:ゲーム中、3:プレイヤー1減、4:ステージクリア、5:ゲームオーバー表示、6:終了
 	if(music_on) gamestatuscount=500;
@@ -1629,7 +1685,6 @@ int main(void){
 	gpio_init(LCD_RESET);
 	gpio_put(LCD_RESET, 1);
 	gpio_set_dir(LCD_RESET, GPIO_OUT);
-
 
 	lcd_align=HORIZONTAL;
 	// Read MACHIKAP.INI
