@@ -2,6 +2,7 @@
 ラズベリーPi PicoにQVGAの液晶を接続して画面が回転しながらスクロールする本格的シューティングゲームです。  
 とてもシンプルな回路なので、簡単に製作することができます。  
 液晶は240x320ドット、コントローラにILI9341を搭載したSPI接続のものに対応しています。  
+BASICマイコンMachiKania type Pでもそのまま動作させることができます。  
 VELUDDAについての詳細は<a href="http://www.ze.em-net.ne.jp/~kenken/veludda/index.html" target="_blank">こちら</a>  
 
 ## 実行方法
