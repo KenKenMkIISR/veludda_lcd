@@ -11,6 +11,6 @@ veludda_pico.uf2は/buildディレクトリにあります。
 ## ソースプログラムのビルド方法
 ソースプログラムのビルドにはRP2040に対応したコンパイラの他、CMake、pico-sdkが必要です。  
 SDKが使用できる環境設定をした上で、ダウンロードした拡張子が.c .h .txt .cmakeのファイルを同じフォルダに入れてビルドしてください。  
-![](veludda_pico1.JPG)  
-![](veludda_pico2.JPG)  
+![](veludda_pico1.jpg)  
+![](veludda_pico2.jpg)  
 ![](schematic_veludda_pico.png)  
