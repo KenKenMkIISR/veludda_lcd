@@ -1,6 +1,6 @@
-// 画面回転スクロールゲーム　メインプログラム　VELUDDA for PIC32MX370F512H by K.Tanaka Rev 1.0
+// 画面回転スクロールゲーム　メインプログラム　VELUDDA for Raspberry Pi Pico by K.Tanaka
 //
-// 拡大縮小回転機能付き液晶出力システム使用（上8行固定表示）
+// 拡大縮小回転機能付き液晶出力システム使用
 // 解像度 横256×縦216ドット＋上8行
 // VRAM容量256×256ドット、8ビットカラー
 
@@ -190,19 +190,52 @@ struct {
 _Enemy enemybuf[MAX_ENEMY],gndenemybuf[MAX_GNDENEMY];//空中敵、地上敵格納配列
 _Missile missilebuf[MAX_MISSILE],cannonbuf[MAX_CANNON];//ミサイル、砲弾格納配列
 
-#define PWM_WRAP 4000 // 125MHz/31.25KHz
+#define PWM_WRAP1 1341 // 250MHz/2.983MHz*16
+#define PWM_WRAP2 5364 // 250MHz/2.983MHz*16*4
+#define PWM_WRAP3 21455 // 250MHz/2.983MHz*16*16
 uint pwm_slice_num;
+uint16_t pwm_wrap=0;
+uint16_t pwm_freq=0;
 
 //----------------------
 // ここからプログラム開始
 //----------------------
 void sound_on(uint16_t f){
-	f/=3;
+	if(f==pwm_freq) return;
+	pwm_freq=f;
+	if(f==0){
+		// sound off
+		pwm_set_enabled(pwm_slice_num, false);
+		return;
+	}
+	if(f<0x1000){
+		if(pwm_wrap!=PWM_WRAP1){
+			pwm_wrap=PWM_WRAP1;
+			pwm_set_wrap(pwm_slice_num, PWM_WRAP1-1);
+			pwm_set_chan_level(pwm_slice_num, PWM_CHAN_A, PWM_WRAP1/2); //duti ratio 50%
+		}
+	}
+	else if(f<0x4000){
+		if(pwm_wrap!=PWM_WRAP2){
+			pwm_wrap=PWM_WRAP2;
+			pwm_set_wrap(pwm_slice_num, PWM_WRAP2-1);
+			pwm_set_chan_level(pwm_slice_num, PWM_CHAN_A, PWM_WRAP2/2); //duti ratio 50%
+		}
+		f>>=2;
+	}
+	else{
+		if(pwm_wrap!=PWM_WRAP3){
+			pwm_wrap=PWM_WRAP3;
+			pwm_set_wrap(pwm_slice_num, PWM_WRAP3-1);
+			pwm_set_chan_level(pwm_slice_num, PWM_CHAN_A, PWM_WRAP3/2); //duti ratio 50%
+		}
+		f>>=4;
+	}
 	pwm_set_clkdiv_int_frac(pwm_slice_num, f>>4, f&15);
 	pwm_set_enabled(pwm_slice_num, true);
 }
 void sound_off(void){
-	pwm_set_enabled(pwm_slice_num, false);
+	sound_on(0);
 }
 
 void wait60thsec(unsigned short n){
@@ -224,31 +257,12 @@ unsigned char startkeycheck(unsigned short n){
 	}
 	return 0;
 }
-void playmusic60thsec(void){
-	//60分の1秒ウェイト後、現在演奏中の曲を1つ進める
-	wait60thsec(1); //60分の1秒ウェイト
-	if(music.stop) return; //演奏終了済み
-	music.count--;
-	if(music.count>0) return;
-
-	//次の音を鳴らす
-	if(*music.p==254){ //曲終了
-		music.stop=1;
-		sound_off();
-		return;
-	}
-	if(*music.p==255) sound_off(); //休符
-	else sound_on(sounddata[*music.p]); //周期データ
-	music.p++;
-	music.count=*music.p; //音符長さ
-	music.p++;
-}
 void playmusic1step(void){
 	//演奏中の曲を1つ進める
 	if(music.stop) return; //演奏終了済み
 	music.count--;
 	if(music.count>0){
-		if(music.pr) sound_on(music.pr);
+		sound_on(music.pr);
 		return;
 	}
 	//次の音を鳴らす
@@ -323,8 +337,7 @@ void sound(void){
 		}
 	}
 
-	if(pr==0) sound_off();
-	else if(pr!=2) sound_on(pr);//音程変更。ただしprが2の場合BGM優先
+	if(pr!=2) sound_on(pr);//音程変更。ただしprが2の場合BGM優先
 }
 
 void keycheck(void){
@@ -1639,9 +1652,7 @@ int main(void){
 	// サウンド用PWM設定
 	gpio_set_function(SOUNDPORT, GPIO_FUNC_PWM);
 	pwm_slice_num = pwm_gpio_to_slice_num(SOUNDPORT);
-	pwm_set_wrap(pwm_slice_num, PWM_WRAP-1);
-	// duty 50%
-	pwm_set_chan_level(pwm_slice_num, PWM_CHAN_A, PWM_WRAP/2);
+	sound_on(0);
 
 	// 液晶用ポート設定
 	// Enable SPI at 64 MHz and connect to GPIOs
