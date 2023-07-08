@@ -7,6 +7,8 @@
 #include "pico/stdlib.h"
 #include "hardware/pwm.h"
 #include "hardware/spi.h"
+#include "hardware/pll.h"
+#include "hardware/clocks.h"
 #include "rotatevideo_lcd.h"
 #include "graphlib.h"
 #include "veludda.h"
@@ -240,20 +242,21 @@ void sound_off(void){
 
 void wait60thsec(unsigned short n){
 	// 60分のn秒ウェイト
-	uint64_t t=to_us_since_boot(get_absolute_time())%16667;
-	sleep_us(16667*n-t);
+	static uint64_t prev_time=0;
+	prev_time+=16667*n;
+	uint64_t t=to_us_since_boot(get_absolute_time());
+	if(t<prev_time) sleep_us(prev_time-t);
+	else prev_time=t;
 }
 unsigned char startkeycheck(unsigned short n){
 	// 60分のn秒ウェイト
 	// スタートボタンが押されればすぐ戻る
 	//　戻り値　スタートボタン押されれば1、押されなければ0
-	uint64_t t=to_us_since_boot(get_absolute_time())%16667;
 	while(n--){
-		sleep_us(16667-t);
+		wait60thsec(1);
 		if(!gpio_get(GPIO_KEYSTART)){
 			return 1;
 		}
-		t=0;
 	}
 	return 0;
 }
@@ -796,7 +799,7 @@ void title(){
 	while(1){
 		//拡大画面から回転しながら通常サイズに戻す、回転中心はロゴ部分から徐々に下げる
 		for(x=254;x>0;x-=2){
-//			wait60thsec(1);
+			wait60thsec(1);
 			putlcdall();//液晶画面にVRAMの内容を転送
 			gcount++;//全体カウンタ
 			vscanv1_x=50*Cos(x)/(x+50);
@@ -820,7 +823,7 @@ void title(){
 		}
 		initvscanv();
 		for(i=0;i<15*60;i++){ //15秒間
-//			wait60thsec(1);
+			wait60thsec(1);
 			putlcdall();//液晶画面にVRAMの内容を転送
 			gcount++;//全体カウンタ
 			keycheck();
@@ -1525,7 +1528,7 @@ void game(){
 	gameinit3();//ステージクリア処理
 	gameinit4();//自機初期化
 	while(gamestatus<6){
-//		wait60thsec(1);
+		wait60thsec(1);
 		putlcdall();//液晶画面にVRAMの内容を転送
 		sound();//サウンド処理
 		erasechars();//背景以外の描画消去
@@ -1574,62 +1577,18 @@ void read_ini(void){
 	f_close(&fpo);
 }
 
-#include "hardware/pll.h"
-#include "hardware/clocks.h"
 int main(void){
-    // Before we touch PLLs, switch sys and ref cleanly away from their aux sources.
+	// SYSTEM Clock, Peripheral Clockを250MHzに設定
     hw_clear_bits(&clocks_hw->clk[clk_sys].ctrl, CLOCKS_CLK_SYS_CTRL_SRC_BITS);
     while (clocks_hw->clk[clk_sys].selected != 0x1)
         tight_loop_contents();
-    hw_clear_bits(&clocks_hw->clk[clk_ref].ctrl, CLOCKS_CLK_REF_CTRL_SRC_BITS);
-    while (clocks_hw->clk[clk_ref].selected != 0x1)
-        tight_loop_contents();
 
-    /// \tag::pll_init[]
     pll_init(pll_sys, 1, 1500 * MHZ, 3, 2);
-    pll_init(pll_usb, 1, 1200 * MHZ, 5, 5);
-    /// \end::pll_init[]
-
-    // Configure clocks
-    // CLK_REF = XOSC (12MHz) / 1 = 12MHz
-    clock_configure(clk_ref,
-                    CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC,
-                    0, // No aux mux
-                    12 * MHZ,
-                    12 * MHZ);
-
-    /// \tag::configure_clk_sys[]
-    // CLK SYS = PLL SYS (250MHz) / 1 = 250MHz
     clock_configure(clk_sys,
                     CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
                     CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
                     250 * MHZ,
                     250 * MHZ);
-    /// \end::configure_clk_sys[]
-
-    // CLK USB = PLL USB (48MHz) / 1 = 48MHz
-    clock_configure(clk_usb,
-                    0, // No GLMUX
-                    CLOCKS_CLK_USB_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
-                    48 * MHZ,
-                    48 * MHZ);
-
-    // CLK ADC = PLL USB (48MHZ) / 1 = 48MHz
-    clock_configure(clk_adc,
-                    0, // No GLMUX
-                    CLOCKS_CLK_ADC_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
-                    48 * MHZ,
-                    48 * MHZ);
-
-    // CLK RTC = PLL USB (48MHz) / 1024 = 46875Hz
-    clock_configure(clk_rtc,
-                    0, // No GLMUX
-                    CLOCKS_CLK_RTC_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
-                    48 * MHZ,
-                    46875);
-
-    // CLK PERI = clk_sys. Used as reference clock for Peripherals. No dividers so just select and enable
-    // Normally choose clk_sys or clk_usb
     clock_configure(clk_peri,
                     0,
                     CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLK_SYS,
@@ -1672,11 +1631,10 @@ int main(void){
 	gpio_set_dir(LCD_RESET, GPIO_OUT);
 
 
-//	lcd_align=HORIZONTAL;
-	lcd_align=HORIZONTAL | LCD180TURN;
+	lcd_align=HORIZONTAL;
 	// Read MACHIKAP.INI
-//	f_mount(&FatFs, "", 0);
-//	read_ini(); //MACHKAP.INIファイル読み込み
+	f_mount(&FatFs, "", 0);
+	read_ini(); //MACHKAP.INIファイル読み込み
 	init_rotateLCD(lcd_align); //グラフィックおよびLCDの初期化
 
 	gameinit(); //ゲーム全体初期化

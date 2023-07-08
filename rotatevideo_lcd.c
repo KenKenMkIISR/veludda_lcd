@@ -282,6 +282,14 @@ void putlcdall(void){
 	unsigned short d;
 
 	LCD_setAddrWindow(DISPLEFTMARGIN,DISPTOPMARGIN,DISPXSIZE,TOPLINE+DISPYSIZE);
+	// change to 16 bit SPI
+    hw_write_masked(&spi_get_hw(LCD_SPICH)->cr0,
+		((uint)(16 - 1)) << SPI_SSPCR0_DSS_LSB |
+		((uint)SPI_CPOL_0) << SPI_SSPCR0_SPO_LSB |
+		((uint)SPI_CPHA_0) << SPI_SSPCR0_SPH_LSB,
+		SPI_SSPCR0_DSS_BITS |
+		SPI_SSPCR0_SPO_BITS |
+		SPI_SSPCR0_SPH_BITS);
 	lcd_dc_hi();
 	lcd_cs_lo();
 	x=vscanstartx;
@@ -293,9 +301,6 @@ void putlcdall(void){
 				d=ClTable[*p];
 				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
 					;
-				((spi_hw_t *)LCD_SPICH)->dr = d>>8;
-				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
-					;
 				((spi_hw_t *)LCD_SPICH)->dr = d;
 				p+=VRAM_X;
 			}
@@ -303,9 +308,6 @@ void putlcdall(void){
 			y1=y;
 			for(j=0;j<DISPYSIZE;j++){
 				d=ClTable[*(VRAM+(y1&0xff00)+(x1>>8))];
-				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
-					;
-				((spi_hw_t *)LCD_SPICH)->dr = d>>8;
 				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
 					;
 				((spi_hw_t *)LCD_SPICH)->dr = d;
@@ -323,9 +325,6 @@ void putlcdall(void){
 				d=ClTable[*p];
 				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
 					;
-				((spi_hw_t *)LCD_SPICH)->dr = d>>8;
-				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
-					;
 				((spi_hw_t *)LCD_SPICH)->dr = d;
 				p++;
 			}
@@ -338,9 +337,6 @@ void putlcdall(void){
 				d=ClTable[*(VRAM+(y1&0xff00)+(x1>>8))];
 				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
 					;
-				((spi_hw_t *)LCD_SPICH)->dr = d>>8;
-				while (!(((const spi_hw_t *)LCD_SPICH)->sr & SPI_SSPSR_TNF_BITS))
-					;
 				((spi_hw_t *)LCD_SPICH)->dr = d;
 				x1+=vscanv1_x;
 				y1+=vscanv1_y;
@@ -350,6 +346,14 @@ void putlcdall(void){
 		}
 	}
 	checkSPIfinish();
+	// change to 8 bit SPI
+    hw_write_masked(&spi_get_hw(LCD_SPICH)->cr0,
+		((uint)(8 - 1)) << SPI_SSPCR0_DSS_LSB |
+		((uint)SPI_CPOL_0) << SPI_SSPCR0_SPO_LSB |
+		((uint)SPI_CPHA_0) << SPI_SSPCR0_SPH_LSB,
+		SPI_SSPCR0_DSS_BITS |
+		SPI_SSPCR0_SPO_BITS |
+		SPI_SSPCR0_SPH_BITS);
 }
 
 //  VRAMクリア、液晶画面クリア
