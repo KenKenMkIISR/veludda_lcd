@@ -9,7 +9,7 @@ VELUDDAについての詳細は<a href="http://www.ze.em-net.ne.jp/~kenken/velud
 ## 実行方法
 ラズベリーPi PicoのBOOTSELボタンを押しながらPCのUSBポートに接続し、バイナリーファイル veludda_pico.uf2 をラズベリーPi Picoにコピーしてください。  
 veludda_pico.uf2は/buildディレクトリにあります。  
-従来版から背景の解像度を縦横2倍としました。また、SDカードのルートに「VELUDDA.BMP」というファイル名で512x256ドット128色のBMPファイルを入れておくことで、背景画像を変更することができます。  
+SDカードのルートに「VELUDDA.BMP」というファイル名で512x256ドット128色のBMPファイルを入れておくことで、背景画像を変更することができます。  
   
 ## ソースプログラムのビルド方法
 ソースプログラムのビルドにはRP2040に対応したコンパイラの他、CMake、pico-sdkが必要です。  

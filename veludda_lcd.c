@@ -835,7 +835,8 @@ int read_bmp(unsigned char *f_name){
 //ゲーム全体初期化
 void gameinit(){
 	//カラーパレット設定
-	int i;
+	int i,j;
+	unsigned char d;
 	const unsigned char *p;
 	// 背景画像読み込み
 	// 読み込みできなかった場合は標準画像を使用
@@ -845,8 +846,15 @@ void gameinit(){
 			set_palette(i,*p,*(p+2),*(p+1));
 			p+=3;
 		}
-		for(i=0;i<MAPBMPDX*MAPBMPDY;i++){
-			mapdataram[i]=mapdata[i];
+		p=mapdata;
+		for(i=0;i<MAPBMPDY;i+=2){
+			for(j=0;j<MAPBMPDX;j+=2){
+				mapdataram[i*MAPBMPDX+j]=*p;
+				mapdataram[i*MAPBMPDX+j+1]=*p;
+				mapdataram[(i+1)*MAPBMPDX+j]=*p;
+				mapdataram[(i+1)*MAPBMPDX+j+1]=*p;
+				p++;
+			}
 		}
 	}
 	gcount=0;//全体カウンター
