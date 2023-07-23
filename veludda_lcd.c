@@ -1,5 +1,6 @@
 // 画面回転スクロールゲーム　メインプログラム　VELUDDA for Raspberry Pi Pico by K.Tanaka
-// Revision 1.0
+// Revision 1.1
+// 背景解像度　縦横2倍、BMPファイルロード対応
 //
 // 拡大縮小回転機能付き液晶出力システム使用
 // 解像度 横256×縦216ドット＋上8行
@@ -19,6 +20,8 @@
 FATFS FatFs;
 int button_rotation=0;
 unsigned char lcd_align;
+unsigned char mapdataram[MAPBMPDX*MAPBMPDY];
+
 
 //三角関数テーブル（1周256分割、値は256倍）
 const short sindata[256]={
@@ -470,17 +473,17 @@ void drawvline(unsigned char x1,unsigned char y1,unsigned char y2,int mx,int my,
 	unsigned char x,y,y3;
 	x=0;
 	while(d!=0){
-		p=mapdata+(((mx+x)>>2) & (MAPDX/4-1));
+		p=mapdataram+(((mx+x)>>1) & (MAPDX/2-1));
 		y=0;
 		y3=y1;
 		while(y3!=y2){
-//			pset(x1,y3,*(p+(((my+y)/4) & (MAPDY/4-1))*(MAPDX/4)));
-			*(VRAM+y3*VRAM_X+x1)=*(p+(((my+y)>>2) & (MAPDY/4-1))*(MAPDX/4));
+//			pset(x1,y3,*(p+(((my+y)/2) & (MAPDY/2-1))*(MAPDX/2)));
+			*(VRAM+y3*VRAM_X+x1)=*(p+(((my+y)>>1) & (MAPDY/2-1))*(MAPDX/2));
 			y++;
 			y3++;
 		}
-//		pset(x1,y3,*(p+(((my+y)/4) & (MAPDY/4-1))*(MAPDX/4)));
-		*(VRAM+y3*VRAM_X+x1)=*(p+(((my+y)>>2) & (MAPDY/4-1))*(MAPDX/4));
+//		pset(x1,y3,*(p+(((my+y)/2) & (MAPDY/2-1))*(MAPDX/2)));
+		*(VRAM+y3*VRAM_X+x1)=*(p+(((my+y)>>1) & (MAPDY/2-1))*(MAPDX/2));
 		x++;
 		x1++;
 		d--;
@@ -498,17 +501,17 @@ void drawhline(unsigned char y1,unsigned char x1,unsigned char x2,int mx,int my,
 	unsigned char x,y,x3;
 	y=0;
 	while(d!=0){
-		p=mapdata+(((my+y)>>2) & (MAPDY/4-1))*(MAPDX/4);
+		p=mapdataram+(((my+y)>>1) & (MAPDY/2-1))*(MAPDX/2);
 		x=0;
 		x3=x1;
 		while(x3!=x2){
-//			pset(x3,y1,*(p+(((mx+x)/4) & (MAPDX/4-1))));
-			*(VRAM+y1*VRAM_X+x3)=*(p+(((mx+x)>>2) & (MAPDX/4-1)));
+//			pset(x3,y1,*(p+(((mx+x)/2) & (MAPDX/2-1))));
+			*(VRAM+y1*VRAM_X+x3)=*(p+(((mx+x)>>1) & (MAPDX/2-1)));
 			x++;
 			x3++;
 		}
-//		pset(x3,y1,*(p+(((mx+x)/4) & (MAPDX/4-1))));
-		*(VRAM+y1*VRAM_X+x3)=*(p+(((mx+x)>>2) & (MAPDX/4-1)));
+//		pset(x3,y1,*(p+(((mx+x)/2) & (MAPDX/2-1))));
+		*(VRAM+y1*VRAM_X+x3)=*(p+(((mx+x)>>1) & (MAPDX/2-1)));
 		y++;
 		y1++;
 		d--;
@@ -763,15 +766,88 @@ void gameinit2(){
 	if(music_on) startmusic(musicdata1);//ゲーム開始時の音楽
 }
 
+typedef struct tagBITMAPFILEHEADER {
+  WORD  bfType;
+  DWORD bfSize;
+  WORD  bfReserved1;
+  WORD  bfReserved2;
+  DWORD bfOffBits;
+} BITMAPFILEHEADER;
+
+typedef struct tagBITMAPINFOHEADER {
+  DWORD biSize;
+  DWORD biWidth;
+  DWORD biHeight;
+  WORD  biPlanes;
+  WORD  biBitCount;
+  DWORD biCompression;
+  DWORD biSizeImage;
+  DWORD biXPelsPerMeter;
+  DWORD biYPelsPerMeter;
+  DWORD biClrUsed;
+  DWORD biClrImportant;
+} BITMAPINFOHEADER;
+
+// 背景画像ビットマップファイル読み込み
+// 成功した場合0、失敗した場合1を返す
+int read_bmp(unsigned char *f_name){
+	FIL fpo;
+	BITMAPFILEHEADER bmpfheader;
+	BITMAPINFOHEADER bmpiheader;
+	UINT br;
+	uint8_t cl[4];
+	int c,x,y;
+	// Open BMP file
+	if(f_open(&fpo,f_name,FA_READ)) return 1;
+	int er=1;
+	while(er){
+		//BMPファイルヘッダー、ファイルインフォ読み込み
+		if(f_read(&fpo,&bmpfheader.bfType,2,&br)) break;
+		if(bmpfheader.bfType!=('B'+'M'*256)) break;
+		//bfSize以降2バイトずれているので分けて読み込む
+		if(f_read(&fpo,&bmpfheader.bfSize,12,&br)) break;
+		if(f_read(&fpo,&bmpiheader,sizeof bmpiheader,&br)) break;
+		if(bmpiheader.biWidth!=MAPBMPDX || bmpiheader.biHeight!=MAPBMPDY || bmpiheader.biBitCount!=8) break;
+		//カラーパレット読み込み、設定（パレット番号128以降に設定）
+		for(c=128;c<=255;c++){
+			if(f_read(&fpo,cl,4,&br)) break;
+			set_palette(c,cl[0],cl[2],cl[1]);
+		}
+		if(c<256) break;
+		if(f_lseek(&fpo,bmpfheader.bfOffBits)) break;
+		//画像データ読み込み、パレット番号は128足す
+		for(y=MAPBMPDY-1;y>=0;y--){
+			if(f_read(&fpo,mapdataram+y*MAPBMPDX,MAPBMPDX,&br)) break;
+			uint8_t *p=mapdataram+y*MAPBMPDX;
+			for(x=0;x<MAPBMPDX;x++){
+				*p+=128;
+				p++;
+			}
+		}
+		if(y>=0) break;
+		er=0;
+	}
+	// Close file
+	f_close(&fpo);
+	return er;
+}
+
 //ゲーム全体初期化
 void gameinit(){
 	//カラーパレット設定
 	int i;
 	const unsigned char *p;
-	p=paldata2;
-	for(i=128;i<256;i++){
-		set_palette(i,*p,*(p+2),*(p+1));
-		p+=3;
+	// 背景画像読み込み
+	// 読み込みできなかった場合は標準画像を使用
+	if(read_bmp("VELUDDA.BMP")){
+		p=paldata2;
+		for(i=128;i<256;i++){
+			set_palette(i,*p,*(p+2),*(p+1));
+			p+=3;
+		}
+		for(i=0;i<MAPBMPDX*MAPBMPDY;i++){
+			mapdataram[i]=mapdata[i];
+		}
 	}
 	gcount=0;//全体カウンター
 	score=0;

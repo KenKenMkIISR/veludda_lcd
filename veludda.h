@@ -18,8 +18,10 @@
 #define GPIO_ALL_MASK 0b00011100011100000000001111111111
 #define SOUNDPORT 28
 
-#define MAPDX (256*4) //全体マップの横サイズ（ビットマップデータは4分の1のみ）
-#define MAPDY (128*4) //全体マップの縦サイズ（ビットマップデータは4分の1のみ）
+#define MAPBMPDX 512
+#define MAPBMPDY 256
+#define MAPDX (MAPBMPDX*2) //全体マップの横サイズ（ビットマップデータは2分の1のみ）
+#define MAPDY (MAPBMPDY*2) //全体マップの縦サイズ（ビットマップデータは2分の1のみ）
 #define NORMALIZEX(x) ((x)&(MAPDX*256-1)) //絶対座標の右端からはみ出した部分を左端からの位置にするマクロ
 #define NORMALIZEY(y) ((y)&(MAPDY*256-1)) //絶対座標の下端からはみ出した部分を上端からの位置にするマクロ
 //#define MAPDXMASK (MAPDX*256-1) //絶対座標の右端からはみ出した部分を左端にするためのマスク値
