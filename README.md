@@ -3,11 +3,13 @@
 とてもシンプルな回路なので、簡単に製作することができます。  
 液晶は240x320ドット、コントローラにILI9341を搭載したSPI接続のものに対応しています。  
 BASICマイコンMachiKania type Pでもそのまま動作させることができます。  
+SDカードは不要ですが、MachiKania type Pの設定ファイル「MACHIKAP.INI」ファイルに「LCD180TURN」がある場合、液晶を180度回転します。  
 VELUDDAについての詳細は<a href="http://www.ze.em-net.ne.jp/~kenken/veludda/index.html" target="_blank">こちら</a>  
 
 ## 実行方法
 ラズベリーPi PicoのBOOTSELボタンを押しながらPCのUSBポートに接続し、バイナリーファイル veludda_pico.uf2 をラズベリーPi Picoにコピーしてください。  
 veludda_pico.uf2は/buildディレクトリにあります。  
+従来版から背景の解像度を縦横2倍としました。また、SDカードのルートに「VELUDDA.BMP」というファイル名で512x256ドット128色のBMPファイルを入れておくことで、背景画像を変更することができます。  
   
 ## ソースプログラムのビルド方法
 ソースプログラムのビルドにはRP2040に対応したコンパイラの他、CMake、pico-sdkが必要です。  
